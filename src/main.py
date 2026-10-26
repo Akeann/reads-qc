@@ -11,11 +11,13 @@ import math
 import random
 import numpy as np
 import matplotlib.pyplot as plt
+from pathlib import Path
 # import pandas as pd
 # from Bio import SeqIO
 
-IN = "D:\\Работа\\секвенирование\\апрель 2024\\reads_2024_04_02.fastq"
-OUTDIR = "D:\\Работа\\секвенирование\\апрель 2024\\результаты\\"
+BASE_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_INPUT = BASE_DIR / "data" / "raw" / "reads_2024_04_02.fastq"
+DEFAULT_RESULTS = BASE_DIR / "results"
 
 ADAPTER = "AGATCGGAAGAGC"
 
@@ -24,7 +26,7 @@ SKIPPED = []
 
 
 def read_fastq():
-    f = open(IN)
+    f = open(DEFAULT_INPUT, encoding="utf-8")
     lines = f.readlines()
     f.close()
     print("строк в файле", len(lines))
@@ -61,103 +63,111 @@ def meanq(q):
     return t / len(q)
 
 
-r = read_fastq()
-print("прочтений", len(r))
-print("!!! проверка", r[0][0])
+def main():
+    # П2: автоматическое создание каталога результатов
+    DEFAULT_RESULTS.mkdir(parents=True, exist_ok=True)
+    
+    r = read_fastq()
+    print("прочтений", len(r))
+    # П4: Удален отладочный вывод print("!!! проверка", r[0][0])
 
-good = []
-bad = []
-for x in r:
-    try:
-        z = meanq(x[2])
-    except:
-        pass
-    s = x[1]
-    if s[0:13] == ADAPTER:
-        s = s[13:]
-        x[2] = x[2][13:]
-    if z >= 25 and len(s) >= 100:
-        good.append([x[0], s, x[2]])
-    else:
-        bad.append(x[0])
-    STATS.append([x[0], len(s), gc(s), z])
+    good = []
+    bad = []
+    for x in r:
+        try:
+            z = meanq(x[2])
+        except:
+            pass
+        s = x[1]
+        if s[0:13] == ADAPTER:
+            s = s[13:]
+            x[2] = x[2][13:]
+        if z >= 25 and len(s) >= 100:
+            good.append([x[0], s, x[2]])
+        else:
+            bad.append(x[0])
+        STATS.append([x[0], len(s), gc(s), z])
 
-print("хороших", len(good))
-print("плохих", len(bad))
-print("отброшено при чтении", len(SKIPPED))
+    print("хороших", len(good))
+    print("плохих", len(bad))
+    print("отброшено при чтении", len(SKIPPED))
 
-# ---- GC по хорошим ----
-g1 = []
-for x in good:
-    g1.append(gc(x[1]))
-m1 = sum(g1) / len(g1)
-print("средний GC хороших", m1)
+    # ---- GC по хорошим ----
+    g1 = []
+    for x in good:
+        g1.append(gc(x[1]))
+    m1 = sum(g1) / len(g1)
+    print("средний GC хороших", m1)
 
-# ---- GC по всем ----
-g2 = []
-for x in r:
-    g2.append(gc(x[1]))
-m2 = sum(g2) / len(g2)
-print("средний GC всех", m2)
+    # ---- GC по всем ----
+    g2 = []
+    for x in r:
+        g2.append(gc(x[1]))
+    m2 = sum(g2) / len(g2)
+    print("средний GC всех", m2)
 
-# случайная подвыборка для оценки
-sub = random.sample(STATS, 500)
-qq = []
-for x in sub:
-    qq.append(x[3])
-print("среднее качество по подвыборке", sum(qq) / 500)
+    # П5: Убрана случайность (random.sample), теперь подвыборка детерминирована
+    sub = STATS[:500]
+    qq = []
+    for x in sub:
+        qq.append(x[3])
+    print("среднее качество по подвыборке", sum(qq) / 500)
 
-nn = 0
-for x in r:
-    if "N" in x[1]:
-        nn = nn + 1
-print("прочтений с N", nn)
-print("доля N-содержащих", nn / len(r))
+    nn = 0
+    for x in r:
+        if "N" in x[1]:
+            nn = nn + 1
+    print("прочтений с N", nn)
+    print("доля N-содержащих", nn / len(r))
 
-# for x in STATS:
-#     if x[3] < 15:
-#         print("очень плохое", x[0])
+    plt.figure(figsize=(10, 4))
+    plt.subplot(1, 2, 1)
+    plt.hist(g2, bins=40)
+    plt.axvline(m2, color="r")
+    plt.xlabel("GC, %")
+    plt.ylabel("число прочтений")
+    plt.title("GC-состав")
+    plt.subplot(1, 2, 2)
+    ll = []
+    for x in STATS:
+        ll.append(x[3])
+    plt.hist(ll, bins=40)
+    plt.axvline(25, color="r")
+    plt.xlabel("среднее качество")
+    plt.ylabel("число прочтений")
+    plt.title("Качество прочтений")
+    plt.tight_layout()
+    
+    # П1, П2: Сохранение по относительному пути
+    plt.savefig(DEFAULT_RESULTS / "qc.png", dpi=200)
+    print("график готов")
 
-plt.figure(figsize=(10, 4))
-plt.subplot(1, 2, 1)
-plt.hist(g2, bins=40)
-plt.axvline(m2, color="r")
-plt.xlabel("GC, %")
-plt.ylabel("число прочтений")
-plt.title("GC-состав")
-plt.subplot(1, 2, 2)
-ll = []
-for x in STATS:
-    ll.append(x[3])
-plt.hist(ll, bins=40)
-plt.axvline(25, color="r")
-plt.xlabel("среднее качество")
-plt.ylabel("число прочтений")
-plt.title("Качество прочтений")
-plt.tight_layout()
-plt.savefig(OUTDIR + "qc.png", dpi=200)
-print("график готов")
+    # П3: Кодировка при записи
+    f2 = open(DEFAULT_RESULTS / "clean_reads.fasta", "w", encoding="utf-8")
+    for x in good:
+        f2.write(">" + x[0][1:] + "\n")
+        f2.write(x[1] + "\n")
+    f2.close()
 
-f2 = open(OUTDIR + "clean_reads.fasta", "w")
-for x in good:
-    f2.write(">" + x[0][1:] + "\n")
-    f2.write(x[1] + "\n")
-f2.close()
+    f3 = open(DEFAULT_RESULTS / "qc_summary.tsv", "w", encoding="utf-8")
+    f3.write("read\tlength\tgc\tmeanq\n")
+    for x in STATS:
+        f3.write(x[0][1:] + "\t" + str(x[1]) + "\t" + str(round(x[2], 2)) + "\t" + str(round(x[3], 2)) + "\n")
+    f3.close()
 
-f3 = open(OUTDIR + "qc_summary.tsv", "w")
-f3.write("read\tlength\tgc\tmeanq\n")
-for x in STATS:
-    f3.write(x[0][1:] + "\t" + str(x[1]) + "\t" + str(round(x[2], 2)) + "\t" + str(round(x[3], 2)) + "\n")
-f3.close()
+    f4 = open(DEFAULT_RESULTS / "report.txt", "w", encoding="utf-8")
+    f4.write("QC ОТЧЁТ\n")
+    # П1: В отчет пишется имя файла, а не абсолютный путь
+    f4.write("файл: " + DEFAULT_INPUT.name + "\n")
+    f4.write("всего прочтений: " + str(len(r)) + "\n")
+    f4.write("прошло фильтр: " + str(len(good)) + "\n")
+    f4.write("средний GC: " + str(round(m2, 2)) + "\n")
+    f4.write("прочтений с N: " + str(nn) + "\n")
+    f4.close()
 
-f4 = open(OUTDIR + "report.txt", "w")
-f4.write("QC ОТЧЁТ\n")
-f4.write("файл: " + IN + "\n")
-f4.write("всего прочтений: " + str(len(r)) + "\n")
-f4.write("прошло фильтр: " + str(len(good)) + "\n")
-f4.write("средний GC: " + str(round(m2, 2)) + "\n")
-f4.write("прочтений с N: " + str(nn) + "\n")
-f4.close()
+    print("отчёт записан в", DEFAULT_RESULTS / "report.txt")
+    print("ГОТОВО")
 
-print("отчёт записан в", OUTDIR + "report.txt")
-print("ГОТОВО")
+# П4: Точка входа
+if __name__ == "__main__":
+    main()
